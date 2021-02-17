@@ -1,0 +1,201 @@
+sload core
+
+fmod BOOL-EXPR is
+    pr PACKET .
+
+    sort BoolExpr .
+
+    op _(_) : BoolExpr Packet -> Bool . --- BoolExpr can be evaluated to a boolean by taking a packet as an argument. Equivalent to _`(_`) (Manual-P34)
+
+    var NP : NtPacket .
+    --- var P : Packet .
+    vars A A1 A2 : Address .
+    var Y : Type .
+    vars E1 E2 : BoolExpr .
+
+    --- Primitive BoolExpr
+    ops assertSrc assertDst assertLoc : Address -> BoolExpr [ctor] . 
+    eq assertSrc(A)(NP) = getSrc(NP) == A .
+    eq assertSrc(A)(fault-packet) = false .
+    eq assertSrc(A)(null-packet) = false .
+    eq assertDst(A)(NP) = getDst(NP) == A .
+    eq assertDst(A)(fault-packet) = false .
+    eq assertDst(A)(null-packet) = false .    
+    eq assertLoc(A)(NP) = getLoc(NP) == A .
+    eq assertLoc(A)(fault-packet) = false .
+    eq assertLoc(A)(null-packet) = false .    
+
+    op assertTyp : Type -> BoolExpr [ctor] .
+    eq assertTyp(Y)(NP) = getTyp(NP) == Y .
+    eq assertTyp(Y)(fault-packet) = false .
+    eq assertTyp(Y)(null-packet) = false .
+
+    op _and_ : BoolExpr BoolExpr -> BoolExpr [assoc comm prec 55] . --- "and" relation between BoolExprs
+    op _or_ : BoolExpr BoolExpr -> BoolExpr [assoc comm prec 59] . --- "or" relation between BoolExprs
+    eq (E1 and E2)(NP) = E1(NP) and E2(NP) .
+    eq (E1 or E2)(NP) = E1(NP) or E2(NP) .
+
+    --- Defined BoolExpr (the operators that disappear after equational simplification)
+    op _->_ : Address Address -> BoolExpr .
+    eq A1 -> A2 = assertSrc(A1) and assertDst(A2) .
+endfm
+
+fmod RULE is
+    pr NAT .
+    pr BOOL-EXPR .
+
+    sort SeqRule Rule .
+    subsort SeqRule < Rule .
+
+    --- Primitive rules
+    op error : -> Rule [ctor] .
+    op skip : -> Rule [ctor] .
+    op drop : -> Rule [ctor] .
+
+    op filter : BoolExpr -> Rule [ctor] .
+    op upSrc : Address -> Rule [ctor] .
+    op upDst : Address -> Rule [ctor] .
+    op forward : Address -> Rule [ctor] .
+
+    op _;_ : Rule Rule -> SeqRule [ctor assoc] . --- no need for gather when assoc is presented
+    op _+_ : Rule Rule -> Rule [ctor assoc] . --- comm is not necessary (distinguish each path)
+    op if_then_else_ : BoolExpr Rule Rule -> Rule [ctor] .
+    op while_do_|_ : BoolExpr Rule Nat -> Rule [ctor] .
+
+    var E : BoolExpr .
+    var R : Rule .
+    vars A1 A2 : Address .
+    var Y : Type .
+
+    --- BlockRule is a kind of rules in the firewall that block some specific kinds of packets. 
+    --- Rules that follow some particular paradigms are recognized as BlockRules.
+    sort BlockRule .
+    subsort BlockRule < Rule .
+
+    --- Membership of the BlockRule (need to specify the canonical form)
+    mb if assertSrc(A1) and assertDst(A2) then drop else skip : BlockRule . --- Block the packet by SRC and DST
+    mb if assertSrc(A1)                   then drop else skip : BlockRule . --- Block the packet by SRC
+    mb if                   assertDst(A2) then drop else skip : BlockRule . --- Block the packet by DST
+    mb if assertTyp(Y)                    then drop else skip : BlockRule . --- Block the packet by packet type
+
+    --- Defined rules
+    op if_then_ : BoolExpr Rule -> Rule .
+    eq if E then R = if E then R else skip .
+
+    op _-/->_ : Address Address -> BlockRule . 
+    eq A1 -/-> A2 = if assertSrc(A1) and assertDst(A2) then drop .
+
+    op _-/-> : Address -> BlockRule . 
+    eq A1 -/-> = if assertSrc(A1) then drop .
+
+    op -/->_ : Address -> BlockRule . 
+    eq -/-> A2 = if assertDst(A2) then drop .
+
+    op [_]-/-> : Type -> BlockRule . 
+    eq [Y]-/-> = if assertTyp(Y) then drop .
+endfm
+
+fmod RULE-FUNCTION is
+    pr NODE .
+    pr RULE .
+
+    sort RuleFunction .
+
+    op _(_) : RuleFunction Node -> Rule .
+endfm
+
+mod EXECUTION-STATE is
+    pr PACKET-LIST .
+    pr RULE .
+    pr TOPOLOGY .
+
+    sort ExecutionState .
+
+    op state : Rule Packet Address -> ExecutionState [ctor] .
+    op _|-_ : Topology ExecutionState -> Packet [ctor] .
+
+    vars R R1 R2 : Rule .
+    var NP : NtPacket .
+    vars P P1 P2 : Packet .
+    vars L E A1 A2 : Address .
+    var Y : Type .
+    var T : Topology .
+    var B : BoolExpr .
+    var N : Nat .
+
+    crl [ASen] :
+        T |- state(R, NP, L) => NP
+        if L =/= getLoc(NP) .
+    rl [Null] :
+        T |- state(R, null-packet, L) => null-packet .
+    rl [Fault] :
+        T |- state(R, fault-packet, L) => fault-packet .
+    rl [Skip] :
+        T |- state(skip, P, L) => P .
+    crl [Drop] :
+        T |- state(drop, NP, L) => null-packet
+        if L == getLoc(NP) .
+    crl [Error] :
+        T |- state(error, NP, L) => fault-packet
+        if L == getLoc(NP) .
+
+    crl [Filter1] :
+        T |- state(filter(B), NP, L) => NP
+        if L == getLoc(NP) /\ B(NP) == true .
+    crl [Filter2] :
+        T |- state(filter(B), NP, L) => null-packet
+        if L == getLoc(NP) /\ B(NP) == false .
+    crl [UpSrc] :
+        T |- state(upSrc(E), NP, L) => setSrc(NP, E)
+        if L == getLoc(NP) .
+    crl [UpDst] :
+        T |- state(upDst(E), NP, L) => setDst(NP, E) 
+        if L == getLoc(NP) .
+    crl [Fwd1] :
+        T |- state(forward(E), NP, L) => setLoc(NP, E)
+        if L == getLoc(NP) /\ edge(node(L), node(E)) in T .
+    crl [Fwd2] :
+        T |- state(forward(E), NP, L) => fault-packet
+        if L == getLoc(NP) /\ not (edge(node(L), node(E)) in T) .
+
+    crl [Seq] :
+        T |- state(R1 ; R2, P, L) => P2 --- need space before and after the semicolon
+        if T |- state(R1, P, L) => P1 /\ T |- state(R2, P1, L) => P2 .
+    crl [Choice1] :
+        T |- state(R1 + R2, P, L) => P1
+        if T |- state(R1, P, L) => P1 .
+    crl [Choice2] :
+        T |- state(R1 + R2, P, L) => P2
+        if T |- state(R2, P, L) => P2 .
+    crl [Cond1] :
+        T |- state(if B then R1 else R2, P, L) => P1
+        if B(P) == true /\ T |- state(R1, P, L) => P1 .
+    crl [Cond2] : 
+        T |- state(if B then R1 else R2, P, L) => P2
+        if B(P) == false /\ T |- state(R2, P, L) => P2 .
+    crl [Loop1] :
+        T |- state(while B do R | N, P, L) => P
+        if N == 0 or B(P) == false .
+    crl [Loop2] :
+        T |- state(while B do R | N, P, L) => P2
+        if B(P) == true /\ N >= 1 /\
+            T |- state(R, P, L) => P1 /\
+            T |- state(while B do R | sd(N, 1), P1, L) => P2 .
+endm
+
+mod SEMANTICS is
+    pr EXECUTION-STATE .
+
+    var R : Rule .
+    var T : Topology .
+    var L : Address .
+    vars P : Packet .
+    vars PL : List{Packet} .
+
+    op sem[_;_,_](_) : Rule Topology Address List{Packet} -> List{Packet} .
+    eq sem[R ; T , L](nil) = nil .
+    eq sem[R ; T , L](P PL) = $sem[R ; T , L](P) sem[R ; T , L](PL) .
+
+    op $sem[_;_,_](_) : Rule Topology Address Packet -> List{Packet} . --- deals with single packet
+    eq $sem[R ; T , L](P) = T |- state(R, P, L) .
+endm

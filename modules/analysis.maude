@@ -1,0 +1,114 @@
+sload semantics
+sload model-checker
+
+mod NETWORK is
+    pr EXECUTION-STATE .
+    pr RULE-FUNCTION .
+
+    sort Conf .
+    subsort Packet < Conf .
+
+    var T : Topology .
+    var RF : RuleFunction .
+    var NP : NtPacket .
+
+    op [_,_](_) : Topology RuleFunction Packet -> Conf [format (d d d s d d d d d)] . --- currently deals with single packet
+    eq [T, RF](null-packet) = null-packet . --- fail fast
+    eq [T, RF](fault-packet) = fault-packet . --- fail fast
+    ceq [T, RF](NP) = NP if RF(node(getLoc(NP))) == skip . --- If there's no rule in a node, reduce the configuration to a single final packet
+    eq [T, RF](NP) = [T, RF](T |- state(RF(node(getLoc(NP))), NP, getLoc(NP))) . --- use the transition rules to proces the packet
+endm
+
+mod NETWORK-PREDS is
+    pr NETWORK .
+    inc SATISFACTION .
+    subsort Conf < State .
+
+    var C : Conf .
+    var T : Topology .
+    var RF : RuleFunction .
+    var P : Packet .
+    var N : Node .
+    var NS : Set{Node} .
+    vars R R1 R2 : Rule .
+    vars A1 A2 : Address .
+    var Y : Type .
+
+    op conflict : Topology RuleFunction -> Prop . --- the state predicate "conflict" takes Topology as argument and evaluates the Configuration
+
+    ceq P |= conflict(T, RF) = true if P violates getNodeSet(T) with RF . --- a conflict is detected in a configuration (final packet) when the packet violates the node set with a given rule function
+    eq C |= conflict(T, RF) = false [owise] . --- notice that, only the final state has the form of a bare packet P. If it's in a middle stage, no conflict.
+
+    op _violates_with_ : Packet Set{Node} RuleFunction -> Bool . --- determines whether a packet violates a node set with given rule function
+    eq P violates empty with RF = false .
+    eq P violates (N, NS) with RF = if P violates N with RF then true else P violates NS with RF fi [owise] . --- Need the [owise] !!! If omit [owise], stackoverflow ? WHY?
+
+    op _violates_with_ : Packet Node RuleFunction -> Bool . --- determines whether a packet violates a node
+    eq P violates N with RF = if N :: FwNode then P violates RF(N) else false fi . --- the packet doesn't violate a non-firewall node
+
+    op _violates_ : Packet Rule -> Bool . --- determines whether a packet violates a rule
+    ceq P violates R = false if not (R :: BlockRule) /\ not (R :: SeqRule) .
+    eq P violates R1 ; R2 = if P violates R1 then true else P violates R2 fi . --- determines whether a packet violates a SeqRule
+
+    op _violates_ : Packet BlockRule -> Bool . --- determines whether a packet violates the BlockRule
+    eq P violates if assertSrc(A1) and assertDst(A2) then drop else skip = assertSrc(A1)(P) and assertLoc(A2)(P) .
+    eq P violates if assertSrc(A1) then drop else skip = assertSrc(A1)(P) .
+    eq P violates if assertDst(A2) then drop else skip = assertLoc(A2)(P) .
+    eq P violates if assertTyp(Y) then drop else skip = assertTyp(Y)(P) .
+endm
+
+--- NETWORK-CHECK
+mod ANALYSIS is
+    pr NETWORK-PREDS .
+    inc MODEL-CHECKER .
+    inc LTL-SIMPLIFIER . --- optional
+endm
+
+--- Version 2 of analysis
+--- Instead of distinguishing firewall nodes from normal nodes,
+--- version 2 allows every node to "install" firewall rules (BlockRule).
+--- To detect conflict, the final packet will be checked against all BlockRules.
+
+mod NETWORK-PREDS-V2 is
+    pr NETWORK .
+    inc SATISFACTION .
+    subsort Conf < State .
+
+    var C : Conf .
+    var T : Topology .
+    var RF : RuleFunction .
+    var P : Packet .
+    var N : Node .
+    var NS : Set{Node} .
+    vars R R1 R2 : Rule .
+    vars A1 A2 : Address .
+    var Y : Type .
+
+    op conflict : Topology RuleFunction -> Prop .
+
+    ceq P |= conflict(T, RF) = true if P violates getNodeSet(T) with RF .
+    eq C |= conflict(T, RF) = false [owise] .
+
+    op _violates_with_ : Packet Set{Node} RuleFunction -> Bool .
+    eq P violates empty with RF = false .
+    eq P violates (N, NS) with RF = if P violates N with RF then true else P violates NS with RF fi [owise] .
+
+    op _violates_with_ : Packet Node RuleFunction -> Bool .
+    eq P violates N with RF = P violates RF(N) . --- the only difference from V1. The packet is checked against all rules (BlockRule)
+
+    op _violates_ : Packet Rule -> Bool .
+    ceq P violates R = false if not (R :: BlockRule) /\ not (R :: SeqRule) .
+    eq P violates R1 ; R2 = if P violates R1 then true else P violates R2 fi .
+
+    op _violates_ : Packet BlockRule -> Bool .
+    eq P violates if assertSrc(A1) and assertDst(A2) then drop else skip = assertSrc(A1)(P) and assertLoc(A2)(P) .
+    eq P violates if assertSrc(A1) then drop else skip = assertSrc(A1)(P) .
+    eq P violates if assertDst(A2) then drop else skip = assertLoc(A2)(P) .
+    eq P violates if assertTyp(Y) then drop else skip = assertTyp(Y)(P) .
+endm
+
+mod ANALYSIS-V2 is
+    pr NETWORK-PREDS-V2 .
+    inc MODEL-CHECKER .
+    inc LTL-SIMPLIFIER .
+endm

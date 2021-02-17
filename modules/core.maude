@@ -1,0 +1,120 @@
+sload base
+
+fmod PACKET is
+    pr ADDRESS .
+    pr TYPE .
+
+    sorts NtPacket Packet . --- NtPacket (Non-trivial Packet) is the packet defined as a 4-tuple (src, dst, typ, loc)
+    subsort NtPacket < Packet .
+
+    op packet : Address Address Type Address -> NtPacket [ctor] . --- a non-trivial packet is defined as a 4-tuple (src, dst, typ, loc)
+    ops null-packet fault-packet : -> Packet [ctor] . --- null packet and fault packet
+
+    vars A1 A2 A3 A' : Address .
+    var Y : Type .
+
+    ops getSrc getDst getLoc : NtPacket -> Address .
+    eq getSrc(packet(A1, A2, Y, A3)) = A1 .
+    eq getDst(packet(A1, A2, Y, A3)) = A2 .
+    eq getLoc(packet(A1, A2, Y, A3)) = A3 .
+    
+    op getTyp : NtPacket -> Type .
+    eq getTyp(packet(A1, A2, Y, A3)) = Y .
+
+    ops setSrc setDst setLoc : NtPacket Address -> NtPacket .
+    eq setSrc(packet(A1, A2, Y, A3), A') = packet(A', A2, Y, A3) .
+    eq setDst(packet(A1, A2, Y, A3), A') = packet(A1, A', Y, A3) .
+    eq setLoc(packet(A1, A2, Y, A3), A') = packet(A1, A2, Y, A') .
+endfm
+
+view Packet from TRIV to PACKET is
+    sort Elt to Packet .
+endv
+
+fmod PACKET-LIST is
+    pr LIST{Packet} .
+endfm
+
+fmod NODE is
+    pr ADDRESS .
+
+    sorts FwNode Node . --- FwNode (Firewall Node) is the node established with the firewall
+    subsort FwNode < Node .
+
+    op node : Address -> Node [ctor] .
+
+    var A : Address .
+    var N : Node .
+
+    op getAddress : Node -> Address .
+    eq getAddress(node(A)) = A .
+
+    cmb node(A) : FwNode if A hasPrefix "fw" . --- the node whose address has prefix "fw" is regarded as a firewall node
+endfm
+
+fmod EDGE is
+    pr NODE .
+
+    sort Edge .
+    op edge : Node Node -> Edge [ctor comm] . --- [comm] stands for undirected edge
+
+    --- Determine endpoint [NOT IN USED]
+    --- vars N N' : Node .
+    --- var E : Edge .
+
+    --- op _isEndpointOf_ : Node Edge -> Bool .
+    --- eq N isEndpointOf edge(N, N') = true .
+    --- eq N isEndpointOf E = false [owise] .
+endfm
+
+view Node from TRIV to NODE is
+    sort Elt to Node .
+endv
+
+fmod NODE-SET is
+    pr SET{Node} .
+endfm
+
+view Edge from TRIV to EDGE is
+    sort Elt to Edge .
+endv
+
+fmod EDGE-SET is
+    pr SET{Edge} .
+
+    --- Incident edges of a node [NOT IN USED]
+    --- var N : Node .
+    --- vars S A : Set{Edge} .
+    --- var E : Edge .
+
+    --- op adjacent[_](_) : Set{Edge} Node -> Set{Edge} .
+    --- eq adjacent[S](N) = $adjacent[S](N, empty) .
+
+    --- op $adjacent[_](_,_) : Set{Edge} Node Set{Edge} -> Set{Edge} . --- auxiliary operation that stores adjacent edges
+    --- eq $adjacent[empty](N, A) = A .
+    --- eq $adjacent[E, S](N, A) = $adjacent[S](N, if N isEndpointOf E then insert(E, A) else A fi) .
+endfm
+
+fmod TOPOLOGY is
+    pr NODE-SET .
+    pr EDGE-SET .
+
+    sort Topology .
+
+    op topology : Set{Node} Set{Edge} -> Topology [ctor] .
+
+    var N : Node .
+    var E : Edge .
+    var NS : Set{Node} .
+    var ES : Set{Edge} .
+
+    op _in_ : Node Topology -> Bool .
+    op _in_ : Edge Topology -> Bool .
+    eq N in topology(NS, ES) = N in NS .
+    eq E in topology(NS, ES) = E in ES .
+
+    op getNodeSet : Topology -> Set{Node} .
+    op getEdgeSet : Topology -> Set{Edge} .
+    eq getNodeSet(topology(NS, ES)) = NS .
+    eq getEdgeSet(topology(NS, ES)) = ES .
+endfm

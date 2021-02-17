@@ -1,0 +1,56 @@
+sload semantics
+
+fmod FLOW-TABLE-NETWORK is
+    pr TOPOLOGY .
+    pr RULE-FUNCTION .
+
+    sort FlowTableNetwork .
+
+    op ftn : Topology RuleFunction -> FlowTableNetwork [ctor] .
+
+    var T : Topology .
+    var RF : RuleFunction .
+
+    op getTopology : FlowTableNetwork -> Topology .
+    eq getTopology(ftn(T, RF)) = T .
+
+    op getRuleFunction : FlowTableNetwork -> RuleFunction .
+    eq getRuleFunction(ftn(T, RF)) = RF .
+endfm
+
+fmod PATH is
+    pr NODE .
+
+    sort Path .
+    subsort Node < Path .
+
+    op nil : -> Path [ctor] .
+    op _;_ : Path Path -> Path [ctor assoc id: nil] .
+
+    --- vars H1 H2 : Path .
+    --- op append : Path Path -> Path .
+    --- eq append(H1, H2) = H1 ; H2 .
+endfm
+
+mod OUTPUT is
+    pr SEMANTICS .
+    pr FLOW-TABLE-NETWORK .
+    pr PATH .
+
+    var W : FlowTableNetwork .
+    var H : Path .
+    var N : Node .
+    var PL : List{Packet} .
+    var P : Packet .
+
+    op out[_](_,_) : FlowTableNetwork Path List{Packet} -> List{Packet} [format (d d d d d d d s d d)] .
+    eq out[W](H , nil) = nil .
+    eq out[W](H , P PL) = $out[W](H , P) out[W](H , PL) .
+
+    op $out[_](_,_) : FlowTableNetwork Path Packet -> List{Packet} . --- deals with single packet
+    eq $out[W](nil , P) = P .
+    eq $out[W](N ; H , P) = out[W](H , sem[
+        getRuleFunction(W)(N) ;
+        getTopology(W) ,
+        getAddress(N)](P)) .
+endm

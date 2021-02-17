@@ -1,0 +1,34 @@
+sload modules/analysis
+
+--- A case with centralized controller
+--- From (Zhang et al, 2017)
+mod CASE-3 is
+    pr ANALYSIS-V2 .
+
+    op ns : -> Set{Node} .
+    eq ns = node('a), node('b), node('c), node('d), node('sw-1), node('sw-2), node('sw-3) .
+
+    op es : -> Set{Edge} .
+    eq es = 
+        edge(node('a), node('sw-1)), edge(node('d), node('sw-1)),
+        edge(node('sw-1), node('sw-2)), edge(node('sw-2), node('sw-3)), 
+        edge(node('c), node('sw-3)), edge(node('b), node('sw-3)) .
+
+    op t : -> Topology .
+    eq t = topology(ns, es) .
+
+    op rf : -> RuleFunction .
+    eq rf(node('sw-1)) = ('a -/-> 'c) ; (if 'a -> 'b then upSrc('d)) ; forward('sw-2) .
+    eq rf(node('sw-2)) = ('a -/-> 'c) ; (if 'd -> 'b then upDst('c)) ; forward('sw-3) .
+    eq rf(node('sw-3)) = ('a -/-> 'c) ; (if 'd -> 'c then upSrc('a)) ; forward('c) . --- add upSrc('a) to correspond to the Theorem 4.2
+    eq rf(node('a)) = forward('sw-1) .
+
+    eq rf(N:Node) = skip [owise] .
+endm
+
+--- rew [t, rf](packet('a, 'b, "SSH", 'a)) . --- initial destination is set to 'b
+
+--- red modelCheck(
+---     [t, rf](packet('a, 'b, "SSH", 'a)),
+---     [] ~ conflict(t, rf)
+--- ) .

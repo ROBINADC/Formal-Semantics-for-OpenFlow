@@ -1,0 +1,79 @@
+sload modules/analysis
+
+--- A cognitive case
+--- From (Zhao et al, 2018)
+mod CASE-1 is
+    pr ANALYSIS .
+    
+    op ns : -> Set{Node} .
+    eq ns = node('a), node('fw), node('sw), node('b), node('c) .
+
+    op es : -> Set{Edge} .
+    eq es = edge(node('a), node('fw)), edge(node('fw), node('sw)), edge(node('sw), node('b)), edge(node('sw), node('c)) .
+
+    op t : -> Topology .
+    eq t = topology(ns, es) .
+
+    op rf : -> RuleFunction .
+    eq rf(node('a)) = forward('fw) .
+    eq rf(node('fw)) = (if ('a -> 'b) then drop else skip) ; forward('sw) . --- reformat the rules in firewall from "if ('a -> 'b) then drop else forward('sw)"
+    eq rf(node('sw)) = (if ('a -> 'c) then upDst('b) else skip) ; (if ('a -> 'b) then forward('b) else skip) ; drop . --- use drop to prevent packet stranded
+    eq rf(N:Node) = skip [owise] . --- all other nodes have rule "skip" representing no rule
+
+    op pk : -> Packet .
+    eq pk = packet('a, 'c, "SSH", 'a) .
+
+    op target-pk : -> Packet .
+    eq target-pk = packet('a, 'b, "SSH", 'b) .
+endm
+
+
+*** analysis
+
+--- NETWORK
+
+--- rew [t, rf](pk) .
+--- search [t, rf](pk) =>* P:Packet such that P:Packet == target-pk .
+--- show path labels 12 .
+
+--- rew [t, rf](fault-packet) .
+
+--- rew [t, rf](packet('a, 'b, "SSH", 'a)) .
+--- search [t, rf](packet('a, 'b, "SSH", 'a)) =>* P:Packet such that P:Packet == null-packet .
+--- show path labels 8 .
+
+--- rew [t, rf](packet('c, 'd, "SSH", 'sw)) .
+--- rew [1] [t, rf](packet('a, 'b, "SSH", 'fw)) .
+
+--- NETWORK-PREDS
+
+--- red [t, rf](packet('a, 'b, "SSH", 'a)) |= conflict(t, rf) . --- middle state, false
+--- red packet('a, 'b, "SSH", 'b) |= conflict(t, rf) . --- true
+--- red null-packet |= conflict(t, rf) . --- false
+
+--- red packet('a, 'b, "SSH", 'b) violates ns with rf .
+--- red packet('a, 'b, "SSH", 'b) violates (node('a), node('sw), node('b), node('c)) with rf .
+--- red null-packet violates ns with rf .
+
+--- red packet('a, 'b, "SSH", 'b) violates node('a) with rf . --- false
+--- red packet('a, 'b, "SSH", 'b) violates node('fw) with rf . --- true
+--- red packet('a, 'b, "SSH", 'b) violates node('fw-dummy) with rf . --- false
+
+--- red packet('a, 'b, "SSH", 'b) violates -/-> 'b ; upDst('a) .
+--- red packet('a, 'b, "SSH", 'b) violates upDst('a) .
+--- red packet('a, 'b, "SSH", 'b) violates upDst('a) ; skip ; 'a -/-> . --- true
+--- red packet('a, 'b, "SSH", 'b) violates 'b -/-> ; 'c -/-> . --- false
+--- red packet('a, 'b, "SSH", 'b) violates ["UDP"]-/-> ; 'a -/-> ; 'c -/-> . --- true
+--- red packet('a, 'b, "SSH", 'b) violates upDst('c) ; drop . --- false
+
+--- red packet('a, 'b, "SSH", 'b) violates 'a -/->  . --- true
+--- red packet('a, 'b, "UDP", 'b) violates ["UDP"]-/-> . --- true
+--- red null-packet violates 'a -/-> 'c . --- false
+--- red null-packet violates ["UDP"]-/-> . --- false
+
+--- NETWORK-CHECK
+
+--- red modelCheck(
+---     [t, rf](pk),
+---     [] ~ conflict(t, rf)
+--- ) .

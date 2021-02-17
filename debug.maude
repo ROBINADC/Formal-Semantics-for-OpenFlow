@@ -1,0 +1,116 @@
+sload modules/output
+
+mod DEBUG is
+    pr OUTPUT .
+
+    op initial-nodes : -> Set{Node} .
+    eq initial-nodes = node('a), node('fw), node('sw), node('b), node('c) .
+
+    op initial-edges : -> Set{Edge} .
+    eq initial-edges = edge(node('a), node('fw)), edge(node('fw), node('sw)), edge(node('sw), node('b)), edge(node('sw), node('c)) .
+
+    op initial-topology : -> Topology .
+    eq initial-topology = topology(initial-nodes, initial-edges) .
+
+    op rf : -> RuleFunction .
+    eq rf(node('a)) = forward('fw) .
+    eq rf(node('fw)) = ('a -/-> 'b) ; (["UDP"]-/->) ; forward('sw) .
+    eq rf(node('sw)) = (if ('a -> 'c) then upDst('b) else skip) ; (if ('a -> 'b) then forward('b) else drop) .
+    eq rf(N:Node) = skip [owise] . --- need to specify no rule in other nodes
+endm
+
+*** base.maude
+--- red 'a == 'b .
+--- red (node('a), node('b), node('c)) \ node('b) .
+
+*** packet.maude
+--- red in PACKET-LIST : occurs(packet('a, 'fw, "SSH", 'b), (packet('a, 'fw, "SSH", 'b) packet('a, 'fw, "SSH", 'c))) .
+--- red in PACKET-LIST : getDst(packet('a, 'fw, "SSH", 'b)) .
+
+*** topology.maude
+--- red in NODE-SET : node('a) in (node('a), node('b)) .
+--- red in EDGE-SET : edge(node('fw), node('a)) in (edge(node('a), node('fw)), edge(node('fw), node('sw))) .
+--- red node('b) isEndpointOf edge(node('a), node('b)) .
+--- red adjacent[getEdgeSet(initial-topology)](node('sw)) .
+--- red node('a) in initial-topology .
+--- red edge(node('a), node('fw)) in initial-topology .
+--- red edge(node('fw), node('a)) in initial-topology .
+
+--- red node('a) :: FwNode .
+--- red node('fw1) :: FwNode .
+
+*** semantics.maude
+--- BOOL-EXPR
+--- red assertSrc('a)(packet('a, 'b, "UDP", 'c)) .
+--- red assertTyp("SSH")(packet('a, 'b, "SSH", 'c)) .
+--- red assertTyp("SSH")(packet('a, 'b, "UDP", 'c)) .
+--- red (assertSrc('a) and assertDst('b))(packet('a, 'b, "UDP", 'c)) .
+--- red (assertSrc('a) and assertDst('b) and assertTyp("TCP"))(packet('a, 'b, "UDP", 'c)) .
+--- red (assertSrc('t) or assertDst('b))(packet('a, 'b, "UDP", 'c)) .
+--- red ('a -> 'b)(packet('a, 'b, "UDP", 'c)) .
+--- red skip + skip + skip .
+--- red skip + error == error + skip . --- [TBD]
+
+--- RULE
+--- rew initial-topology |- state(upSrc('a), packet('b, 'c, "SSH", 'd), 'c) .
+--- rew initial-topology |- state(forward('a), null-packet, 'a) .
+--- rew initial-topology |- state(forward('a), fault-packet, 'a) .
+--- rew initial-topology |- state(skip, packet('a, 'b, "SSH", 'a), 'a) .
+--- rew initial-topology |- state(drop, packet('a, 'b, "SSH", 'a), 'a) .
+--- rew initial-topology |- state(error, packet('a, 'b, "SSH", 'a), 'a) .
+
+--- rew initial-topology |- state(filter(assertTyp("SSH")), packet('a, 'b, "SSH", 'a), 'a) .
+--- rew initial-topology |- state(filter(assertSrc('t)), packet('a, 'b, "SSH", 'a), 'a) .
+--- rew initial-topology |- state(upSrc('d), packet('a, 'b, "SSH", 'c), 'c) .
+--- rew initial-topology |- state(upDst('d), packet('a, 'b, "SSH", 'c), 'c) .
+--- rew initial-topology |- state(forward('fw), packet('a, 'b, "SSH", 'a), 'a) .
+--- rew initial-topology |- state(forward('sw), packet('a, 'b, "SSH", 'a), 'a) .
+
+--- rew initial-topology |- state(upSrc('t); forward('fw), packet('a, 'b, "SSH", 'a), 'a) .
+--- rew initial-topology |- state(upSrc('t) + upSrc('x), packet('a, 'b, "SSH", 'a), 'a) .
+--- rew initial-topology |- state(if assertTyp("UDP") then drop else forward('fw), packet('a, 'b, "UDP", 'a), 'a) .
+--- rew initial-topology |- state(if assertTyp("UDP") then drop else forward('fw), packet('a, 'b, "TCP", 'a), 'a) .
+--- rew initial-topology |- state(while assertSrc('t) do forward('fw) | 3, packet('a, 'b, "TCP", 'a), 'a) .
+--- rew initial-topology |- state(while assertLoc('a) do forward('fw) | 3, packet('a, 'b, "TCP", 'a), 'a) .
+--- search [1] initial-topology |- state(while assertLoc('a) do forward('fw) | 3, packet('a, 'b, "TCP", 'a), 'a) =>! P:Packet
+--- such that P:Packet == packet('a, 'b, "TCP", 'fw) .
+
+--- SeqRule
+--- red skip ; drop :: SeqRule .
+--- red skip ; skip ; skip :: SeqRule . --- true
+--- red skip + (skip ; skip) :: SeqRule . --- false
+
+--- BlockRule
+--- red 'a -/-> :: BlockRule .
+--- red if assertTyp("UDP") then drop else skip :: BlockRule .
+--- red if 'x -> 'y then drop :: BlockRule .
+--- rew initial-topology |- state('a -/-> 'c, packet('a, 'c, "SSH", 'a), 'a) .
+--- rew initial-topology |- state('a -/->, packet('a, 'c, "SSH", 'a), 'a) .
+--- rew initial-topology |- state(-/-> 'b, packet('a, 'c, "SSH", 'a), 'a) .
+--- rew initial-topology |- state(["UDP"]-/->, packet('a, 'c, "UDP", 'a), 'a) .
+
+--- SEMANTICS
+--- rew $sem[forward('fw); initial-topology, 'a](packet('a,'b,"SSH",'a)) .
+--- rew sem[forward('fw); initial-topology, 'a](packet('a,'b,"SSH",'a) packet('a,'c,"TCP",'a)) .
+
+
+*** output.maude
+
+--- red getTopology(ftn(initial-topology, rf)) .
+--- red node('a) ; nil .
+--- red node('a) ; node('fw) ; node('sw) ; node('b) :: Path .
+
+--- A full path
+--- rew out[ftn(initial-topology, rf)](node('a) ; node('fw) ; node('sw) ; node('b), packet('a, 'c, "SSH", 'a)) .
+--- search out[ftn(initial-topology, rf)](node('a) ; node('fw) ; node('sw) ; node('b), packet('a, 'c, "SSH", 'a)) =>* 
+--- P:Packet PL:List{Packet} such that P:Packet == packet('a, 'b, "SSH", 'b) .
+
+--- Test Choice
+--- search sem[forward('b) + forward('c) + forward('d) ; initial-topology , 'sw](packet('t, 'tt, "SSH", 'sw)) =>*
+--- P:Packet such that P:Packet == packet('t, 'tt, "SSH", 'c) .
+
+--- Case that the path is formed of one node
+--- rew out[ftn(initial-topology, rf)](node('a), packet('a, 'c, "SSH", 'a)) .
+
+--- Case with multiple packets
+--- rew out[ftn(initial-topology, rf)](node('a) ; node('fw) ; node('sw) ; node('b), packet('a, 'c, "SSH", 'a) packet('a, 'c, "UDP", 'a)) .

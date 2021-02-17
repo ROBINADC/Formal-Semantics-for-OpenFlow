@@ -1,0 +1,47 @@
+sload modules/analysis
+
+--- A moderate case with standalone firewalls
+mod CASE-2 is
+    pr ANALYSIS .
+
+    op ns : -> Set{Node} .
+    eq ns = node('a), node('b), node('y), node('z), node('sw-1), node('sw-2), node('sw-m), node('fw-1), node('fw-2) .
+
+    op es : -> Set{Edge} .
+    eq es = 
+        edge(node('a), node('sw-1)), edge(node('b), node('sw-1)), edge(node('sw-1), node('fw-1)), 
+        edge(node('fw-1), node('sw-m)), edge(node('sw-m), node('fw-2)), 
+        edge(node('fw-2), node('sw-2)), edge(node('sw-2), node('y)), edge(node('sw-2), node('z)) .
+
+    op t : -> Topology .
+    eq t = topology(ns, es) .
+
+    op rf : -> RuleFunction .
+    eq rf(node('fw-1)) = ('a -/->) ; forward('sw-m) .
+    eq rf(node('fw-2)) = (-/-> 'z) ; forward('sw-2) .
+    --- eq rf(node('fw-2)) = (-/-> 'z) ; (-/-> 'y) ; forward('sw-2) . --- If we also block the packet sent to 'y ...
+    eq rf(node('sw-m)) = forward('fw-2) .
+
+    eq rf(node('a)) = forward('sw-1) .
+    eq rf(node('sw-1)) = (if 'a -> 'z then forward('b)) ; forward('fw-1) .
+    eq rf(node('b)) = (if 'a -> 'z then upSrc('b) ; upDst('y)) ; forward('sw-1) .
+    eq rf(node('sw-2)) = (if assertDst('z) then forward('z)) ; (if assertDst('y) then forward('y)) ; drop .
+    eq rf(node('y)) = (if 'b -> 'y then upSrc('a) ; upDst('z)) ; forward('sw-2) .
+
+    eq rf(N:Node) = skip [owise] .
+
+    op pk : -> Packet .
+    eq pk = packet('a, 'z, "SSH", 'a) .
+
+endm
+
+--- rew [t, rf](packet('a, 'z, "SSH", 'a)) .
+
+--- search [t, rf](packet('a, 'z, "SSH", 'a)) =>* P:Packet such that P:Packet == packet('a, 'z, "SSH", 'z) .
+
+--- red modelCheck(
+---     [t, rf](pk),
+---     [] ~ conflict(t, rf)
+--- ) .
+
+

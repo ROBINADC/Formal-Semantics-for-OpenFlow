@@ -1,0 +1,117 @@
+fmod ADDRESS is
+    pr QID .
+
+    sort Address .
+    subsort Qid < Address . --- every quoted identifier is an address
+
+    var A : Address .
+    var S : String .
+
+    op _hasPrefix_ : Address String -> Bool .
+    eq A hasPrefix S = substr(string(A), 0, length(S)) == S .
+endfm
+
+fmod TYPE is
+    pr STRING .
+
+    sort Type .
+    subsort String < Type . --- every string is a packet type
+endfm
+
+set show advisories off .
+
+--- Redefined LIST
+--- - Discard properties that are not in used
+fmod LIST{X :: TRIV} is
+    pr NAT .
+
+    sorts NeList{X} List{X} .
+    subsort X$Elt < NeList{X} < List{X} .
+
+    op nil : -> List{X} [ctor] .
+    op __ : List{X} List{X} -> List{X} [ctor assoc id: nil prec 25] .
+    op __ : NeList{X} List{X} -> NeList{X} [ctor ditto] . --- subsort overload
+    op __ : List{X} NeList{X} -> NeList{X} [ctor ditto] .
+
+    var E E' : X$Elt .
+    vars A L : List{X} .
+    var C : Nat .
+
+    op head : NeList{X} -> X$Elt .
+    eq head(E L) = E .
+
+    op tail : NeList{X} -> List{X} .
+    eq tail(E L) = L .
+
+    --- Occurrence
+    op occurs : X$Elt List{X} -> Bool .
+    eq occurs(E, nil) = false .
+    eq occurs(E, E' L) = if E == E' then true else occurs(E, L) fi .
+
+    --- Size
+    op size : List{X} -> Nat .
+    op size : NeList{X} -> NzNat .
+    eq size(L) = $size(L, 0) .
+
+    op $size : List{X} Nat -> Nat .
+    eq $size(nil, C) = C .
+    eq $size(E L, C) = $size(L, C + 1) .
+    
+endfm
+
+--- Redefined SET
+--- - Change the print format
+--- - Discard properties that are not in used
+fmod SET{X :: TRIV} is
+    pr NAT .
+
+    sort NeSet{X} Set{X} .
+    subsort X$Elt < NeSet{X} < Set{X} .
+
+    op empty : -> Set{X} [ctor] .
+    op _,_ : Set{X} Set{X} -> Set{X} [ctor assoc comm id: empty prec 121 format (d d s d)] . --- "prec 121" requires surrounding parentheses in some ambiguous places
+    op _,_ : NeSet{X} Set{X} -> NeSet{X} [ctor ditto] .
+
+    var E : X$Elt .
+    var N : NeSet{X} .
+    vars A S S' : Set{X} .
+    var C : Nat .
+    
+    --- Uniqueness
+    eq N, N = N .
+
+    --- Insert
+    op insert : X$Elt Set{X} -> Set{X} .
+    eq insert(E, S) = E, S .        
+
+    --- Inclusion
+    op _in_ : X$Elt Set{X} -> Bool .
+    eq E in (E, S) = true .
+    eq E in S = false [owise] .
+
+    --- Cardinality
+    op |_| : Set{X} -> Nat .
+    op |_| : NeSet{X} -> NzNat .
+    eq | S | = $card(S, 0) .
+
+    op $card : Set{X} Nat -> Nat . --- auxiliary operator acting as a helper function
+    eq $card(empty, C) = C .
+    eq $card((N, N, S), C) = $card((N, S), C) .
+    eq $card((E, S), C) = $card(S, C + 1) [owise] .
+
+    --- Set difference
+    op _\_ : Set{X} Set{X} -> Set{X}  [gather (E e)].
+    eq S \ empty = S .
+    eq S \ N = $diff(S, N, empty) .
+
+    op $diff : Set{X} Set{X} Set{X} -> Set{X} .
+    eq $diff(empty, S', A) = A .
+    eq $diff((E, S), S', A) = $diff(S, S', if E in S' then A else (E, A) fi) .
+
+endfm
+
+set show advisories on .
+
+--- Determines whether equation applications are printed
+--- set trace eq on .
+--- set trace eq off .

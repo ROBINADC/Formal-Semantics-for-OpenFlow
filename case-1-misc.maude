@@ -1,0 +1,38 @@
+sload modules/output
+
+mod CASE-1-MISC is
+    pr OUTPUT .
+    
+    op ns : -> Set{Node} .
+    eq ns = node('a), node('fw), node('sw), node('b), node('c) .
+
+    op es : -> Set{Edge} .
+    eq es = edge(node('a), node('fw)), edge(node('fw), node('sw)), edge(node('sw), node('b)), edge(node('sw), node('c)) .
+
+    op t : -> Topology .
+    eq t = topology(ns, es) .
+
+    op rn : -> FlowTableNetwork .
+    eq rn = ftn(t, rf) .
+
+    op path : -> Path .
+    eq path = node('a) ; node('fw) ; node('sw) ; node('b) . --- no path existence and correctness guarantee
+
+    op rf : -> RuleFunction .
+    eq rf(node('a)) = forward('fw) .
+    eq rf(node('fw)) = (if ('a -> 'b) then drop else skip) ; forward('sw) . --- reformat the rules in firewall from "if ('a -> 'b) then drop else forward('sw)"
+    eq rf(node('sw)) = (if ('a -> 'c) then upDst('b) else skip) ; (if ('a -> 'b) then forward('b) else skip) ; drop . --- use drop to prevent packet stranded
+    eq rf(N:Node) = skip [owise] . --- all other nodes have rule "skip" representing no rule
+
+    op pks : -> List{Packet} .
+    eq pks = packet('a, 'c, "SSH", 'a) .
+
+    op target-pk : -> Packet .
+    eq target-pk = packet('a, 'b, "SSH", 'b) .
+endm
+
+*** output
+
+--- search out[rn](path, pks) =>* P:Packet such that P:Packet == target-pk .
+--- search out[rn](path, pks) =>* P:Packet such that P:Packet == packet('a, 'c, "SSH", 'fw) . --- packet does not stop
+--- rew out[rn](path, pks) .

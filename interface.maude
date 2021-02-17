@@ -1,0 +1,17 @@
+sload modules/analysis
+
+mod ICASE is
+    pr ANALYSIS .
+
+    op ns : -> Set{Node} .
+    op es : -> Set{Edge} .
+    op t : -> Topology .
+    eq t = topology(ns, es) .
+    op rf : -> RuleFunction .
+    op pk : -> Packet .
+endm
+
+red modelCheck(
+    [t, rf](pk),
+    [] ~ conflict(t, rf)
+) .
