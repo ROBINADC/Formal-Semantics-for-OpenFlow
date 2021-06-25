@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This project is about using rewriting systems to reason about security conflicts in software defined networks [[1]](#r1).
+This project is about using rewriting systems to reason about security conflicts in software defined networks [1].
 We utilize Maude [2] to implement the operational semantics in [3],
 and leverage the potent model checking tools to detect security conflicts.
 
@@ -40,7 +40,7 @@ A cognitive example taken from [3].
 An example with standalone firewalls.
 
 <div align="center">
-    <img src="./assets/case-2.png" width="80%" alt="Case 2" />
+    <img src="./assets/case-2.png" width="90%" alt="Case 2" />
 </div>
 
 ### Case 3
@@ -48,7 +48,7 @@ An example with standalone firewalls.
 A case with centralized controller taken from [4].
 
 <div align="center">
-    <img src="./assets/case-3.png" width="60%" alt="Case 3" />
+    <img src="./assets/case-3.png" width="70%" alt="Case 3" />
 </div>
 
 ## Dependencies
@@ -68,7 +68,6 @@ Maude> rew [t, rf](packet('a, 'z, "SSH", 'a)) .
 
 ## Reference
 
-<a name="r1"></a>
 [1] Nunes, B. A. A., Mendonca, M., Nguyen, X.-N., Obraczka, K., & Turletti, T. (2014). 
 A Survey of Software-Defined Networking: Past, Present, and Future of Programmable Networks. 
 IEEE Communications Surveys and Tutorials, 16(3), 1617–1634. 
